@@ -1,0 +1,1 @@
+cc -Os pacat-simple.c -o pacat-simple -lpulse-simple
