@@ -9,6 +9,7 @@
 #include <getopt.h>
 #include <pulse/simple.h>
 #include <pulse/error.h>
+#include "handle_ferr.h"
 
 extern int optind;
 static char *pname;
@@ -16,10 +17,27 @@ static char *pname;
 static void help(void)
 {
     printf
-        ("%s [--samples|-s samples/sec] [--duration|-d milliseconds] KEYS\n",
+        ("%s [--samples|-s samples/sec] [--duration|-d milliseconds] [--out|-o file] KEYS\n",
          pname);
     puts("duration is the duration of each tone, KEYS are some sequence of the keys 0-9A-D*#");
     puts("samples defaults to 44100, duration defaults to 500 msec");
+    puts("--out dumps the raw sound data to a file in addition to playing it");
+}
+
+static void dump(FILE * fd, char *fname, float buf[], int len)
+{
+    int i;
+
+    if (len == 0)
+        return;
+
+    for (i = 0; i < len; i++) {
+        if (fprintf(fd, "%g\n", buf[i]) < 0) {
+            handle_ferr(fname, pname);
+            if ((fd != stdout) && (fd != stderr))
+                exit(EXIT_FAILURE);
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -33,18 +51,21 @@ int main(int argc, char *argv[])
     float buf[BUFSIZ];          /* float is 32 bits */
     pa_simple *s = NULL;
     int ret = 1, srate = 44100, msecs =
-        500, freq1, freq2, error, lind, extra, c, i, j, k;
+        500, freq1, freq2, error, lind, extra, c, i, j, k, d = 0;
     size_t ctr, ct;
+    char *fname;
+    FILE *out = NULL;
     struct option longopts[] = {
         {"samples", 1, 0, 0},
         {"duration", 1, 0, 0},
+        {"out", 1, 0, 0},
         {"help", 0, 0, 0},
         {0, 0, 0, 0}
     };
 
     pname = argv[0];
 
-    while ((c = getopt_long(argc, argv, "s:d:h", longopts, &lind)) != -1) {
+    while ((c = getopt_long(argc, argv, "s:d:o:h", longopts, &lind)) != -1) {
         switch (c) {
         case 0:
             switch (lind) {
@@ -55,6 +76,10 @@ int main(int argc, char *argv[])
                 msecs = atoi(optarg);
                 break;
             case 2:
+                fname = optarg;
+                d++;
+                break;
+            case 3:
                 help();
                 exit(EXIT_SUCCESS);
                 break;
@@ -72,6 +97,10 @@ int main(int argc, char *argv[])
         case 'd':
             msecs = atoi(optarg);
             break;
+        case 'o':
+            fname = optarg;
+            d++;
+            break;
         case 'h':
             help();
             exit(EXIT_SUCCESS);
@@ -87,6 +116,13 @@ int main(int argc, char *argv[])
         fprintf(stderr, "no keys specified\n");
         help();
         goto finish;
+    }
+
+    if (d) {
+        if ((out = fopen(fname, "wb")) == NULL) {
+            handle_ferr(fname, pname);
+            goto finish;
+        }
     }
 
     ss.rate = srate;
@@ -196,6 +232,9 @@ int main(int argc, char *argv[])
                     goto finish;
                 }
 
+                if (d)
+                    dump(out, fname, buf, BUFSIZ);
+
                 ct -= BUFSIZ;
                 i = 0;
             }
@@ -212,6 +251,9 @@ int main(int argc, char *argv[])
                         pa_strerror(error));
                 goto finish;
             }
+
+            if (d)
+                dump(out, fname, buf, extra);
         }
 
         if (pa_simple_drain(s, &error) < 0) {
@@ -226,6 +268,9 @@ int main(int argc, char *argv[])
   finish:
     if (s)
         pa_simple_free(s);
+
+    if (d && out && (out != stdout) && (out != stderr))
+        fclose(out);
 
     exit(ret ? EXIT_FAILURE : EXIT_SUCCESS);
 }
