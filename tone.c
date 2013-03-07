@@ -9,6 +9,7 @@
 #include <getopt.h>
 #include <pulse/simple.h>
 #include <pulse/error.h>
+#include "handle_ferr.h"
 
 extern int optind;
 static char *pname;
@@ -16,8 +17,27 @@ static char *pname;
 static void help(void)
 {
     printf
-        ("%s [--samples|-s samples/sec] [--freq|-f frequency] [--duration|-d milliseconds]\n",
+        ("%s [--samples|-s samples/sec] [--freq|-f frequency] [--duration|-d milliseconds] [--out|-o file]\n",
          pname);
+}
+
+static void dump(FILE * fd, char *fname, float buf[], int len)
+{
+    int i;
+
+    if (len == 0)
+        return;
+
+    for (i = 0; i < len; i++) {
+        if (fprintf(fd, "%g\n", buf[i]) < 0) {
+            handle_ferr(fname, pname);
+            if ((fd != stdout) && (fd != stderr)) {
+               fclose(fd);
+            }
+
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -30,20 +50,23 @@ int main(int argc, char *argv[])
     double t;
     float buf[BUFSIZ];          /* float is 32 bits */
     pa_simple *s = NULL;
+    FILE *out = NULL;
+    char *fname;
     int ret = 1, error, freq = 440, srate = 44100, msecs = 500, c, i =
-        0, lind, extra = 0;
+       0, lind, extra = 0, d = 0;
     size_t ctr;
     struct option longopts[] = {
         {"samples", 1, 0, 0},
         {"freq", 1, 0, 0},
         {"duration", 1, 0, 0},
+        {"out", 1, 0, 0},
         {"help", 0, 0, 0},
         {0, 0, 0, 0}
     };
 
     pname = argv[0];
 
-    while ((c = getopt_long(argc, argv, "s:f:d:h", longopts, &lind)) != -1) {
+    while ((c = getopt_long(argc, argv, "s:f:d:o:h", longopts, &lind)) != -1) {
         switch (c) {
         case 0:
             switch (lind) {
@@ -57,6 +80,10 @@ int main(int argc, char *argv[])
                 msecs = atoi(optarg);
                 break;
             case 3:
+               fname = optarg;
+               d++;
+               break;
+            case 4:
                 help();
                 exit(EXIT_SUCCESS);
                 break;
@@ -77,6 +104,10 @@ int main(int argc, char *argv[])
         case 'd':
             msecs = atoi(optarg);
             break;
+        case 'o':
+           fname = optarg;
+           d++;
+           break;
         case 'h':
             help();
             exit(EXIT_SUCCESS);
@@ -93,6 +124,13 @@ int main(int argc, char *argv[])
     ctr = (((double) msecs) / 1000.0) * srate;
 
     extra = ctr % BUFSIZ;
+
+    if (d) {
+       if ((out = fopen(fname, "w")) == NULL) {
+          handle_ferr(pname, fname);
+          goto finish;
+       }
+    }
 
     if (!
         (s =
@@ -117,6 +155,9 @@ int main(int argc, char *argv[])
                 goto finish;
             }
 
+            if (d)
+               dump(out, fname, buf, BUFSIZ);
+
             ctr -= BUFSIZ;
             i = 0;
         }
@@ -131,6 +172,9 @@ int main(int argc, char *argv[])
                     pa_strerror(error));
             goto finish;
         }
+
+        if (d)
+           dump(out, fname, buf, extra);
     }
 
     if (pa_simple_drain(s, &error) < 0) {
@@ -144,6 +188,9 @@ int main(int argc, char *argv[])
   finish:
     if (s)
         pa_simple_free(s);
+
+    if (d && out && (out != stdout) && (out != stderr))
+       fclose(out);
 
     exit(ret ? EXIT_FAILURE : EXIT_SUCCESS);
 }
