@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
     }
 
     if (d) {
-        if ((out = fopen(fname, "wb")) == NULL) {
+        if ((out = fopen(fname, "w")) == NULL) {
             handle_ferr(fname, pname);
             goto finish;
         }
