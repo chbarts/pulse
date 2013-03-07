@@ -34,8 +34,11 @@ static void dump(FILE * fd, char *fname, float buf[], int len)
     for (i = 0; i < len; i++) {
         if (fprintf(fd, "%g\n", buf[i]) < 0) {
             handle_ferr(fname, pname);
-            if ((fd != stdout) && (fd != stderr))
-                exit(EXIT_FAILURE);
+            if ((fd != stdout) && (fd != stderr)) {
+               fclose(fd);
+            }
+
+            exit(EXIT_FAILURE);
         }
     }
 }
