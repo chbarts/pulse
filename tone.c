@@ -17,7 +17,7 @@ static char *pname;
 static void help(void)
 {
     printf
-        ("%s [--samples|-s samples/sec] [--freq|-f frequency] [--duration|-d milliseconds] [--out|-o file]\n",
+        ("%s [--samples|-s samples/sec] [--freq|-f frequency] [--volume|-v percent] [--duration|-d milliseconds] [--out|-o file]\n",
          pname);
 }
 
@@ -32,7 +32,7 @@ static void dump(FILE * fd, char *fname, float buf[], int len)
         if (fprintf(fd, "%g\n", buf[i]) < 0) {
             handle_ferr(fname, pname);
             if ((fd != stdout) && (fd != stderr)) {
-               fclose(fd);
+                fclose(fd);
             }
 
             exit(EXIT_FAILURE);
@@ -47,26 +47,29 @@ int main(int argc, char *argv[])
         .channels = 1
     };
 
-    double t;
+    double t, v = 0.005, freq = 440.0;
     float buf[BUFSIZ];          /* float is 32 bits */
     pa_simple *s = NULL;
     FILE *out = NULL;
     char *fname;
-    int ret = 1, error, freq = 440, srate = 44100, msecs = 500, c, i =
-       0, lind, extra = 0, d = 0;
+    int ret = 1, error, srate = 44100, msecs = 500, c, i =
+        0, lind, extra = 0, d = 0;
     size_t ctr;
     struct option longopts[] = {
         {"samples", 1, 0, 0},
         {"freq", 1, 0, 0},
         {"duration", 1, 0, 0},
         {"out", 1, 0, 0},
+        {"volume", 1, 0, 0},
         {"help", 0, 0, 0},
         {0, 0, 0, 0}
     };
 
     pname = argv[0];
 
-    while ((c = getopt_long(argc, argv, "s:f:d:o:h", longopts, &lind)) != -1) {
+    while ((c =
+            getopt_long(argc, argv, "s:f:d:o:v:h", longopts,
+                        &lind)) != -1) {
         switch (c) {
         case 0:
             switch (lind) {
@@ -74,16 +77,19 @@ int main(int argc, char *argv[])
                 srate = atoi(optarg);
                 break;
             case 1:
-                freq = atoi(optarg);
+                freq = strtod(optarg, NULL);
                 break;
             case 2:
                 msecs = atoi(optarg);
                 break;
             case 3:
-               fname = optarg;
-               d++;
-               break;
+                fname = optarg;
+                d++;
+                break;
             case 4:
+                v = strtod(optarg, NULL);
+                break;
+            case 5:
                 help();
                 exit(EXIT_SUCCESS);
                 break;
@@ -99,15 +105,18 @@ int main(int argc, char *argv[])
             srate = atoi(optarg);
             break;
         case 'f':
-            freq = atoi(optarg);
+            freq = strtod(optarg, NULL);
             break;
         case 'd':
             msecs = atoi(optarg);
             break;
         case 'o':
-           fname = optarg;
-           d++;
-           break;
+            fname = optarg;
+            d++;
+            break;
+        case 'v':
+            v = strtod(optarg, NULL);
+            break;
         case 'h':
             help();
             exit(EXIT_SUCCESS);
@@ -126,10 +135,10 @@ int main(int argc, char *argv[])
     extra = ctr % BUFSIZ;
 
     if (d) {
-       if ((out = fopen(fname, "w")) == NULL) {
-          handle_ferr(pname, fname);
-          goto finish;
-       }
+        if ((out = fopen(fname, "w")) == NULL) {
+            handle_ferr(pname, fname);
+            goto finish;
+        }
     }
 
     if (!
@@ -145,7 +154,7 @@ int main(int argc, char *argv[])
         if (ctr < BUFSIZ)
             break;
 
-        buf[i++] = sin(2 * M_PI * freq * t);
+        buf[i++] = v * sin(2 * M_PI * freq * t);
 
         if (i == BUFSIZ) {
             if (pa_simple_write(s, buf, BUFSIZ * sizeof(*buf), &error) < 0) {
@@ -156,7 +165,7 @@ int main(int argc, char *argv[])
             }
 
             if (d)
-               dump(out, fname, buf, BUFSIZ);
+                dump(out, fname, buf, BUFSIZ);
 
             ctr -= BUFSIZ;
             i = 0;
@@ -165,7 +174,7 @@ int main(int argc, char *argv[])
 
     if (extra > 0) {
         for (i = 0; i < extra; i++, t += 1.0 / srate)
-            buf[i] = sin(2 * M_PI * freq * t);
+            buf[i] = v * sin(2 * M_PI * freq * t);
 
         if (pa_simple_write(s, buf, extra * sizeof(*buf), &error) < 0) {
             fprintf(stderr, __FILE__ ": pa_simple_write() failed: %s\n",
@@ -174,7 +183,7 @@ int main(int argc, char *argv[])
         }
 
         if (d)
-           dump(out, fname, buf, extra);
+            dump(out, fname, buf, extra);
     }
 
     if (pa_simple_drain(s, &error) < 0) {
@@ -190,7 +199,7 @@ int main(int argc, char *argv[])
         pa_simple_free(s);
 
     if (d && out && (out != stdout) && (out != stderr))
-       fclose(out);
+        fclose(out);
 
     exit(ret ? EXIT_FAILURE : EXIT_SUCCESS);
 }
