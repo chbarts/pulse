@@ -258,8 +258,8 @@ int main(int argc, char *argv[])
             if (extra > 0) {
                 for (i = 0; i < extra; i++, t += 1.0 / srate)
                     buf[i] =
-                        sin(2 * M_PI * freq1 * t) +
-                        sin(2 * M_PI * freq2 * t);
+                        v * (sin(2 * M_PI * freq1 * t) +
+                             sin(2 * M_PI * freq2 * t));
 
                 if (pa_simple_write(s, buf, extra * sizeof(*buf), &error) <
                     0) {
